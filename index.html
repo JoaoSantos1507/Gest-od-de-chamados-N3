@@ -707,7 +707,7 @@
             if (!ticket) return;
 
             const recipients = "feliph.santos@eletromidia.com.br,guilherme.nascimento@eletromidia.com.br,adriano.sousa@eletromidia.com.br";
-            const cc = "dirceu.oliveira@eletromidia.com.br,cristiano.santana@eletromidia.com.br,monitoramento@eletromidia.com.br";
+            const cc = "dirceu.oliveira@eletromidia.com.br,cristiano.santana@eletromidia.com.br,monitoramento@eletromidia.com.br,emerson.guarnieri@eletromidia.com.br";
             const subject = `Solicitação de Material: ${ticket.ponto} - Chamado #${ticket.id}`;
             const materialList = ticket.materiais.length > 0 
                 ? ticket.materiais.map(m => `- ${m.qty} ${m.type}`).join('\n')
@@ -1340,3 +1340,4 @@ Economia Gerada (Saving): ${dados.saving}
     </script>
 </body>
 </html>
+
