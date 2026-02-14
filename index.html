@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Chamados N3</title>
+    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/906/906319.png" type="image/png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: { bg: '#0f172a', card: '#1e293b', text: '#f1f5f9' }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.3s ease-out',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body { transition: background-color 0.3s, color 0.3s; }
+        .drag-active { border-color: #60a5fa !important; background-color: rgba(59, 130, 246, 0.1) !important; transform: scale(1.02); }
+        .dropdown-content { display: none; position: absolute; right: 0; z-index: 50; min-width: 180px; }
+        .dropdown-active .dropdown-content { display: block; animation: fadeIn 0.2s ease-out; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; }
+        /* Estilo extra para inputs desabilitados mas legíveis */
+        input:read-only { background-color: rgba(0,0,0,0.05); }
+        .dark input:read-only { background-color: rgba(255,255,255,0.05); }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 dark:bg-dark-bg dark:text-dark-text min-h-screen flex flex-col font-sans overflow-x-hidden">
+
+    <nav class="w-full bg-white dark:bg-dark-card shadow-md py-3 px-6 flex justify-between items-center z-40 sticky top-0">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 p-2 rounded-lg shadow-lg shadow-indigo-500/20">
+                <i class="fa-solid fa-bolt-lightning text-white text-xl"></i>
+            </div>
+            <h1 class="text-xl font-black tracking-tight hidden md:block">CHAMADOS<span class="text-indigo-500">N3</span></h1>
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <button onclick="openFechamentoFinanceiro()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/20">
+                <i class="fa-solid fa-sack-dollar"></i> <span class="hidden sm:inline">Fechamento Financeiro</span>
+            </button>
+
+            <button id="btn-report" onclick="openReport()" class="hidden bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-file-contract"></i> <span class="hidden sm:inline">Relatório</span>
+            </button>
+            
+            <button id="btn-missing" onclick="openMissingMaterialsReport()" class="hidden bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-boxes-packing"></i> <span class="hidden sm:inline">Material Faltante</span>
+            </button>
+
+            <div class="h-8 w-[1px] bg-gray-200 dark:bg-gray-700 mx-2"></div>
+            <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                <i class="fa-solid fa-moon text-lg dark:hidden"></i>
+                <i class="fa-solid fa-sun text-lg hidden dark:block text-yellow-400"></i>
+            </button>
+        </div>
+    </nav>
+
+    <div id="upload-section" class="flex-grow flex items-center justify-center p-6">
+        <div id="drop-zone" class="w-full max-w-xl bg-white dark:bg-dark-card border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-3xl p-12 text-center cursor-pointer transition-all hover:border-indigo-400 group">
+            <div class="bg-indigo-50 dark:bg-indigo-900/20 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+                <i class="fa-solid fa-cloud-arrow-up text-4xl text-indigo-500"></i>
+            </div>
+            <h2 class="text-2xl font-bold mb-2">Importar Chamados</h2>
+            <p class="text-gray-500 dark:text-gray-400 mb-8">Arraste sua planilha .xlsx ou clique para selecionar</p>
+            <input type="file" id="file-input" class="hidden" accept=".xlsx, .xls, .csv">
+            <button class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-500/30 transition-all">Selecionar Arquivo</button>
+        </div>
+    </div>
+
+    <div id="main-interface" class="hidden animate-fade-in px-4 lg:px-8 py-6 space-y-6">
+        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div class="flex flex-wrap gap-1 bg-gray-200/50 dark:bg-gray-800 p-1 rounded-xl w-full lg:w-auto overflow-x-auto">
+                <button id="tab-pendente" onclick="switchTab('pendente')" class="whitespace-nowrap flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all">Pendente (<span id="count-pendente">0</span>)</button>
+                <button id="tab-tratado" onclick="switchTab('tratado')" class="whitespace-nowrap flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all">Tratado (<span id="count-tratado">0</span>)</button>
+                <button id="tab-agendado" onclick="switchTab('agendado')" class="whitespace-nowrap flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all">Agendado (<span id="count-agendado">0</span>)</button>
+                <button id="tab-quarentena" onclick="switchTab('quarentena')" class="whitespace-nowrap flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all text-yellow-600 dark:text-yellow-400">Quarentena (<span id="count-quarentena">0</span>)</button>
+                <button id="tab-sem-material" onclick="switchTab('sem-material')" class="whitespace-nowrap flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all text-red-600 dark:text-red-400">S/ Material (<span id="count-sem-material">0</span>)</button>
+                <button id="tab-encerrado" onclick="switchTab('encerrado')" class="whitespace-nowrap flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all text-slate-600 dark:text-slate-400">Encerrados (<span id="count-encerrado">0</span>)</button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3 w-full lg:w-auto items-center">
+                <span id="tecnico-stats" class="hidden bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-3 py-2 rounded-lg text-xs font-black border border-indigo-200 dark:border-indigo-800 animate-fade-in whitespace-nowrap">
+                    </span>
+
+                <select id="filter-tecnico" onchange="updateUI()" class="bg-white dark:bg-dark-card border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-auto"></select>
+                
+                <select id="sort-date" onchange="updateUI()" class="bg-white dark:bg-dark-card border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-auto">
+                    <option value="desc">Mais recentes</option>
+                    <option value="asc">Mais antigos</option>
+                </select>
+
+                <select id="filter-tempo" onchange="updateUI()" class="bg-white dark:bg-dark-card border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-auto">
+                    <option value="todos">Qualquer tempo</option>
+                    <option value="7">Últimos 7 dias</option>
+                    <option value="30">Últimos 30 dias</option>
+                    <option value="antigos">Mais de 30 dias</option>
+                </select>
+                
+                <div class="relative flex-grow sm:w-64 w-full">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" id="search-input" placeholder="Buscar ID, Local ou Técnico..." class="w-full bg-white dark:bg-dark-card border border-gray-200 dark:border-gray-700 rounded-lg pl-10 pr-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-dark-card rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden min-h-[400px]">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-gray-50 dark:bg-gray-800/80 text-xs uppercase text-gray-500 dark:text-gray-400 font-bold tracking-wider backdrop-blur">
+                        <tr>
+                            <th class="px-6 py-4">ID & Local</th>
+                            <th class="px-6 py-4">Ponto / Área</th>
+                            <th class="px-6 py-4">Técnico/Data</th>
+                            <th class="px-6 py-4 w-1/3">Empresa de elevador / Descrição</th>
+                            <th class="px-6 py-4 text-right">Ações Rápidas / Menu</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="divide-y divide-gray-100 dark:divide-gray-700 text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-relatorio" class="fixed inset-0 bg-black/80 backdrop-blur-md hidden z-[60] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-dark-card rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-fade-in">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/10">
+                <h3 class="text-2xl font-black text-gray-800 dark:text-white flex items-center gap-3">
+                    <i class="fa-solid fa-chart-line text-emerald-500"></i> Relatório Executivo de Operações
+                </h3>
+                <button onclick="closeModals()" class="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+            <div class="p-8 overflow-y-auto custom-scrollbar space-y-8 flex-grow">
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                        <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Total</p>
+                        <p id="rep-total" class="text-3xl font-black text-blue-600">0</p>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                        <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Concluídos</p>
+                        <p id="rep-tratados" class="text-3xl font-black text-green-600">0</p>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                        <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Agendados</p>
+                        <p id="rep-agendados" class="text-3xl font-black text-indigo-600">0</p>
+                    </div>
+                    <div class="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800 shadow-sm col-span-2 md:col-span-1">
+                        <p class="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-2">Custo Previsto</p>
+                        <p id="rep-custo-total" class="text-2xl font-black text-emerald-600 dark:text-emerald-400">R$ 0,00</p>
+                    </div>
+
+                    <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-yellow-200 dark:border-yellow-900/30 shadow-sm">
+                        <p class="text-xs font-bold text-yellow-500 uppercase tracking-widest mb-2">Quarentena</p>
+                        <p id="rep-quarentena" class="text-3xl font-black text-yellow-600">0</p>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-red-200 dark:border-red-900/30 shadow-sm">
+                        <p class="text-xs font-bold text-red-500 uppercase tracking-widest mb-2">Sem Material</p>
+                        <p id="rep-sem-material" class="text-3xl font-black text-red-600">0</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-white dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+                        <h4 class="text-lg font-bold mb-4 flex items-center gap-2 border-b dark:border-gray-700 pb-2">
+                            <i class="fa-solid fa-building-user text-indigo-500"></i> Chamados por Ambiente
+                        </h4>
+                        <div id="rep-ambiente-list" class="space-y-3"></div>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
+                        <h4 class="text-lg font-bold mb-4 flex items-center gap-2 border-b dark:border-gray-700 pb-2">
+                            <i class="fa-solid fa-box-open text-orange-500"></i> Necessidade Total de Materiais
+                        </h4>
+                        <div id="rep-materiais-list" class="space-y-2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-missing-materials" class="fixed inset-0 bg-black/80 backdrop-blur-md hidden z-[60] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-dark-card rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-fade-in">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/10">
+                <h3 class="text-2xl font-black text-gray-800 dark:text-white flex items-center gap-3">
+                    <i class="fa-solid fa-boxes-packing text-indigo-500"></i> Materiais Faltantes
+                </h3>
+                <div class="flex items-center gap-3">
+                    <select id="filter-missing-tecnico" onchange="updateMissingReportUI()" class="bg-white dark:bg-dark-card border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="todos">Todos os Técnicos</option>
+                    </select>
+                    <button onclick="closeModals()" class="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
+                </div>
+            </div>
+            <div class="p-8 overflow-y-auto custom-scrollbar flex-grow">
+                <div class="mb-8">
+                    <h4 class="text-sm font-black uppercase tracking-widest text-gray-500 mb-4 flex items-center gap-2"><i class="fa-solid fa-calculator"></i> Totalização (Apenas Chamados S/ Material)</h4>
+                    <div id="missing-consolidated" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+                </div>
+                <hr class="border-gray-200 dark:border-gray-700 mb-8">
+                <div>
+                    <h4 class="text-sm font-black uppercase tracking-widest text-gray-500 mb-4 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Detalhamento por Chamado</h4>
+                    <div id="missing-list-cards" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-material" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-dark-card rounded-2xl shadow-2xl w-full max-w-2xl transform transition-all scale-100 flex flex-col max-h-[90vh]">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                <h3 class="text-xl font-bold text-gray-800 dark:text-white"><i class="fa-solid fa-toolbox mr-2 text-indigo-500"></i>Materiais do Chamado #<span id="material-id"></span></h3>
+                <button onclick="closeModals()" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar">
+                <div class="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 mb-6">
+                    <p class="text-xs font-bold uppercase text-gray-500 mb-3">Adicionar Novo Item</p>
+                    <div class="flex flex-col md:flex-row gap-3 items-start md:items-center">
+                        <div class="flex-grow w-full flex flex-col gap-2">
+                            <select id="select-material-item" class="w-full bg-white dark:bg-dark-card border border-gray-300 dark:border-gray-600 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                            <input type="text" id="input-material-custom" placeholder="Ou digite outro material..." class="w-full bg-white dark:bg-dark-card border border-gray-300 dark:border-gray-600 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-400">
+                        </div>
+                        <div class="w-full md:w-24">
+                            <input type="number" id="input-material-qty" value="1" min="1" class="w-full bg-white dark:bg-dark-card border border-gray-300 dark:border-gray-600 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 text-center">
+                        </div>
+                        <button onclick="addMaterialToTicket()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 md:h-[88px] w-full md:w-auto">
+                            <i class="fa-solid fa-plus"></i> Add
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <p class="text-xs font-bold uppercase text-gray-500 mb-3">Itens neste chamado</p>
+                    <div id="modal-material-list" class="space-y-2"></div>
+                </div>
+            </div>
+            <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                <button onclick="closeModals()" class="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white font-bold rounded-lg transition-colors">Concluir</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-tratar" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-dark-card rounded-2xl shadow-2xl w-full max-w-lg">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="text-xl font-bold">Tratar Chamado #<span id="tratar-id"></span></h3>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Ocorrência</label>
+                        <select id="select-ocorrencia" class="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-3 outline-none focus:ring-2 focus:ring-green-500">
+                            <option value="">Selecione...</option>
+                            <option value="Elevador em manutenção">Elevador em manutenção</option>
+                            <option value="Elevador em modernização">Elevador em modernização</option>
+                            <option value="Régua desligada">Régua desligada</option>
+                            <option value="Troca de cabo">Troca de cabo</option>
+                            <option value="Verificação de antena">Verificação de antena</option>
+                            <option value="Distrato">Distrato</option>
+                            <option value="Sem energia no Rack">Sem energia no Rack</option>
+                            <option value="Chamado Instalação">Chamado Instalação</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="dynamic-questions-container" class="hidden space-y-4 bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-100 dark:border-green-800">
+                    </div>
+            </div>
+            <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+                <button onclick="closeModals()" class="px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">Cancelar</button>
+                <button onclick="confirmTratar()" class="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-lg">Publicar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-agendamento-financeiro" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-[55] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-dark-card rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gradient-to-r from-blue-600 to-indigo-600">
+                <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-calendar-check"></i> Agendar & Gerar OS
+                </h3>
+                <button onclick="closeModals()" class="text-white hover:text-gray-200"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto custom-scrollbar flex-grow">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Chamado ID</label>
+                        <input type="text" id="os-id" readonly class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded p-2 text-sm text-gray-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Técnico Responsável</label>
+                        <input type="text" id="os-tecnico" readonly class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded p-2 text-sm text-gray-500">
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-1">Data e Hora Agendada</label>
+                    <input type="datetime-local" id="os-agendamento" onchange="calcularTotalAutomatico()" class="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-3 outline-none dark:text-white focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Prédio (Auto)</label>
+                        <input type="text" id="os-predio" readonly class="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-3 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Endereço</label>
+                        <input type="text" id="os-endereco" placeholder="Rua, Número..." class="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-3 outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-1">Tipo de Serviço (Cascata)</label>
+                    <select id="os-tipo-servico" class="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-3 outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Selecione...</option>
+                        <option value="Troca de cabo">Troca de cabo</option>
+                        <option value="Troca de antena">Troca de antena</option>
+                        <option value="Religar régua">Religar régua</option>
+                        <option value="Modernização de tela">Modernização de tela</option>
+                        <option value="Remoção de equipamentos">Remoção de equipamentos</option>
+                        <option value="Outros">Outros</option>
+                    </select>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-1">Descrição Detalhada / Chamado</label>
+                    <input type="text" id="os-chamado" placeholder="Detalhes do serviço..." class="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-3 outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <hr class="border-gray-200 dark:border-gray-700 my-4">
+                <p class="text-xs font-black uppercase text-indigo-500 mb-3">Financeiro</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2 items-end">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Qtd. Elevadores</label>
+                        <input type="number" id="os-elevadores" placeholder="1" oninput="calcularTotalAutomatico()" class="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-3 outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Valor Unitário (R$)</label>
+                        <input type="text" id="os-valor-unitario" placeholder="R$ 0,00" oninput="mascaraMoeda(this); calcularTotalAutomatico()" class="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-3 outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Total Final (R$)</label>
+                        <input type="text" id="os-valor-total" readonly placeholder="R$ 0,00" class="w-full bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-600 rounded-lg p-3 outline-none text-green-700 dark:text-green-400 font-bold">
+                    </div>
+                </div>
+                <div id="os-economia-container" class="mt-2 text-right">
+                     <span id="os-economia" class="text-sm font-black text-gray-400">Economia Estimada: R$ 0,00</span>
+                </div>
+            </div>
+
+            <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 bg-gray-50 dark:bg-gray-800/50 rounded-b-2xl">
+                <button onclick="closeModals()" class="px-4 py-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">Cancelar</button>
+                <button onclick="salvarEAgendar()" class="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-lg shadow-lg transform transition hover:-translate-y-1">
+                    💾 Salvar & Baixar OS
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-fechamento-financeiro" class="fixed inset-0 bg-black/80 backdrop-blur-md hidden z-[60] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-dark-card rounded-2xl shadow-2xl w-full max-w-lg transform transition-all scale-100 animate-fade-in">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-emerald-600">
+                <h3 class="text-xl font-bold text-white"><i class="fa-solid fa-calculator mr-2"></i>Fechamento Financeiro</h3>
+                <button onclick="closeModals()" class="text-white hover:text-emerald-200"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+            <div class="p-8 text-center">
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Arraste os arquivos <b>.txt</b> das Ordens de Serviço (OS) geradas para calcular o total do mês.</p>
+                
+                <div id="drop-zone-fechamento" class="w-full border-2 border-dashed border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-10 cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors">
+                    <i class="fa-solid fa-file-invoice-dollar text-4xl text-emerald-500 mb-3"></i>
+                    <p class="font-bold text-emerald-700 dark:text-emerald-400">Solte os arquivos aqui</p>
+                    <input type="file" id="fileInputFechamento" multiple style="display:none" onchange="calcularArquivos(this.files)">
+                </div>
+
+                <div id="total-result-fechamento" class="mt-8 text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-teal-500">
+                    Total: R$ 0,00
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-5 right-5 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-2xl transform translate-y-20 opacity-0 transition-all duration-300 z-[70] flex items-center gap-3">
+        <i class="fa-solid fa-circle-check text-green-400"></i>
+        <span id="toast-msg">Ação realizada!</span>
+    </div>
+
+    <script>
+        // --- CONFIGURAÇÃO ---
+        // --- CONFIGURAÇÃO DA NUVEM (CONEXÃO GIST) ---
+        const GIST_ID = "f0db34f25d65d37fa617e936eccc05ee";
+        const GIST_FILENAME = "chamados_db.json";
+        const GITHUB_TOKEN = "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";
+
+        const inventoryList = [
+            "MONITOR 15 - (AOC, BENQ, DELL, LENOVO, SAMSUNG, LG)", 
+            "MONITOR 15.6 - (JETWAY JML 200, AOC, SAMSUNG, LG)",
+            "MONITOR 16 - (LG E1641S, PHILIPS 163V5L, SAMSUNG 633NW)", 
+            "MONITOR 17 - (ACER, AOC, DELL, HP, LENOVO, LG, MYMAX, SAMSUNG)",
+            "MONITOR 18,5 - (BOE, HP, LENOVO, LG, SAMSUNG, PROVIEW)", 
+            "MONITOR 18,5 - METRÔ RJ", "MONITOR 18,5 - ORION PC (RESIDENCIAL)",
+            "MONITOR 19 - (AOC, DELL, HP, SAMSUNG)", "MONITOR 19,5 - (AOC, LG)", 
+            "MONITOR 20 - (LG E2011, LG E2050T)",
+            "MONITOR 21,5 - (AOC, DELL, HP, LG, SAMSUNG)", "MONITOR 21,5 - LG ALL IN ONE (RESIDENCIAL)",
+            "MONITOR 21,5 - POSITIVO MASTER A1120 (E RESIDENCIAL)", "MONITOR 21,5 - LG 22MP55 (IPS / COMERCIAL / RESIDENCIAL)",
+            "MONITOR 22 - (DELL, LG, SAMSUNG)", "MONITOR 24 - SAMSUNG CURVO C24F390FHL", "MONITOR 25 - LG 25UM57",
+            "MONITOR 26 - (LG 26LH20R, SAMSUNG LN26B350)", "MONITOR 27 - (SAMSUNG LS27DG300, LT27A550)", "MONITOR 28 - LG 28MT47D",
+            "MONITOR 29 - LG 29MN33D - PS", "MONITOR 32 - (AOC, LG, SAMSUNG, SONY, PHILIPS, PANASONIC)",
+            "MONITOR 32 - SAMSUNG LH32 / SMART TV 32", "MONITOR 34 - (LG 34WP550, LG CURVO, SAMSUNG S34J550)",
+            "MONITOR POSITIVO", "MONITOR PRO 21,5 ALL IN ONE - PROTOTYPE", "SMART TV SAMSUNG 32 LS32BET",
+            "TELA MONITOR LED 7 POLEGADAS (HDMI/VGA)", "TV PHILCO PTV39G5OD LED (32-34)", "ANTENAS E CONECTIVIDADE (BOX)",
+            "ANTENA DIRECIONAL UBIQUITI NANOBEAM M5", "ANTENA INTELBRAS MIMO M5 / WOG 212", "ANTENA NANOSTATION LOCOM5",
+            "ANTENA PAINEL XH2120 - XIRRUS", "ANTENA SETORIAL UBIQUITI AIRMAX", "ANTENA XR-620 - XIRRUS",
+            "ANTENA CELULAR 4G / OMNI 4G", "BOX CLARO 4G", "BOX TIM", "BOX VIVO 4G (E PLACA)", "PEN MODEM (BOX VIVO 4G)",
+            "ROTEADOR EXTERNO COM ANTENA PENTABAND LINK 4G ELSYS (AMPLIMAX)",
+            "CABO PP", "CABO FIXO", "CABO FLAT"
+        ];
+        let allTickets = [];
+        let currentTab = 'pendente';
+        let activeTicketId = null;
+        let tempSavingValue = 0; // Armazena economia calculada
+
+
+
+
+        // --- INICIALIZAÇÃO ---
+        document.getElementById('theme-toggle').addEventListener('click', () => document.documentElement.classList.toggle('dark'));
+        const materialSelect = document.getElementById('select-material-item');
+        inventoryList.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item; option.innerText = item;
+            materialSelect.appendChild(option);
+        });
+
+        // --- UPLOAD E PROCESSAMENTO (EXCEL) ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-active'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-active'));
+        dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-active'); if(e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]); });
+        fileInput.addEventListener('change', (e) => { if(e.target.files.length > 0) processFile(e.target.files[0]); });
+        
+        function processFile(file) {
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+                const data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1});
+                
+                allTickets = data.slice(4).map(row => {
+                    if(!row || !row[0]) return null;
+
+                    // Lógica de Parse da Data
+                    let dataRaw = row[17];
+                    let dataDisplay = '';
+                    let dataObj = new Date();
+                    
+                    if (typeof dataRaw === 'string') {
+                        // Esperado: "10/12/2025 10:05:00" ou similar
+                        dataDisplay = dataRaw.split(' ')[0]; // Pega apenas "10/12/2025"
+                        const parts = dataDisplay.split('/');
+                        if(parts.length === 3) {
+                            // Cria objeto Date (mês em JS é 0-indexado)
+                            dataObj = new Date(parts[2], parts[1]-1, parts[0]);
+                        }
+                    } else if (typeof dataRaw === 'number') {
+                        // Data serial do Excel
+                        dataObj = parseExcelDate(dataRaw);
+                        dataDisplay = formatExcelDate(dataRaw);
+                    }
+
+                    return {
+                        id: row[0].toString(),
+                        codPonto: row[2] || 'N/A',
+                        ponto: row[4] || 'Sem Nome',
+                        ambiente: row[6] || 'Não Definido',
+                        area: row[12] || '', // Captura a área de trabalho
+                        dataCriacaoObj: dataObj,
+                        dataCriacaoStr: dataDisplay,
+                        tecnico: row[19] || 'Sem Técnico',
+                        empresa: row[22] || 'SEM EMPRESA',
+                        historico: row[27] || '',
+                        status: 'pendente', 
+                        materiais: [],
+                        qtdElevadores: 1,
+                        custoTotal: 0, 
+                        tipoServico: '',
+                        tratamentoInfo: {} // Objeto para guardar dados do tratamento
+                    };
+                }).filter(t => t !== null);
+
+                populateTecnicoFilter();
+                document.getElementById('upload-section').classList.add('hidden');
+                document.getElementById('main-interface').classList.remove('hidden');
+                
+                document.getElementById('btn-report').classList.remove('hidden');
+                document.getElementById('btn-missing').classList.remove('hidden');
+                updateUI();
+                showToast(`Sucesso! ${allTickets.length} chamados importados.`);
+                
+                // Salvar automaticamente na nuvem ao importar novos dados
+                salvarNaNuvem();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseExcelDate(val) { if(typeof val === 'number') return new Date(Math.round((val - 25569)*86400*1000)); return new Date(); }
+        function formatExcelDate(val) { return parseExcelDate(val).toLocaleDateString('pt-BR'); }
+
+        function populateTecnicoFilter() {
+            const tecnicos = [...new Set(allTickets.map(t => t.tecnico))].sort();
+            const filter = document.getElementById('filter-tecnico');
+            filter.innerHTML = '<option value="todos">Todos os Técnicos</option>';
+            tecnicos.forEach(tec => {
+                const opt = document.createElement('option');
+                opt.value = tec; opt.innerText = tec;
+                filter.appendChild(opt);
+            });
+        }
+
+        function switchTab(tab) { currentTab = tab; updateUI(); }
+        document.getElementById('search-input').addEventListener('input', updateUI);
+
+        // --- ATUALIZAÇÃO DA UI COM ORDENAÇÃO ---
+        function updateUI() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const tecFilter = document.getElementById('filter-tecnico').value;
+            const tempoFilter = document.getElementById('filter-tempo').value;
+            const sortOrder = document.getElementById('sort-date').value;
+            const today = new Date();
+
+            const statuses = ['pendente', 'tratado', 'agendado', 'quarentena', 'sem-material', 'encerrado'];
+            
+            // Lógica do Contador de Técnico
+            const statsBadge = document.getElementById('tecnico-stats');
+            if (tecFilter !== 'todos') {
+                const totalPorTecnico = allTickets.filter(t => t.tecnico === tecFilter).length;
+                statsBadge.innerText = `Total deste técnico: ${totalPorTecnico} chamados`;
+                statsBadge.classList.remove('hidden');
+            } else {
+                statsBadge.classList.add('hidden');
+            }
+
+            statuses.forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                if (!btn) return;
+
+                document.getElementById(`count-${t}`).innerText = allTickets.filter(ticket => ticket.status === t).length;
+                
+                const isActive = t === currentTab;
+                let activeClass = 'font-bold bg-white dark:bg-gray-700 shadow-sm text-gray-800 dark:text-white transform scale-105';
+                let inactiveClass = 'font-medium text-gray-500 hover:text-gray-700';
+                
+                if (t === 'quarentena' && !isActive) inactiveClass = 'font-medium text-yellow-600/70 hover:text-yellow-700';
+                if (t === 'sem-material' && !isActive) inactiveClass = 'font-medium text-red-600/70 hover:text-red-700';
+                if (t === 'encerrado' && !isActive) inactiveClass = 'font-medium text-slate-600/70 hover:text-slate-700';
+
+                btn.className = `whitespace-nowrap flex-1 lg:flex-none px-4 py-2.5 rounded-md text-sm transition-all ${isActive ? activeClass : inactiveClass}`;
+            });
+
+            // 1. Filtragem
+            let filtered = allTickets.filter(t => {
+                const matchesTab = t.status === currentTab;
+                const matchesSearch = t.tecnico.toLowerCase().includes(searchTerm) || t.ponto.toLowerCase().includes(searchTerm) || t.id.includes(searchTerm);
+                const matchesTec = tecFilter === 'todos' || t.tecnico === tecFilter;
+                let matchesTempo = true;
+                const diffDays = Math.ceil((today - t.dataCriacaoObj) / (1000 * 60 * 60 * 24));
+                if (tempoFilter === '7') matchesTempo = diffDays <= 7;
+                else if (tempoFilter === '30') matchesTempo = diffDays <= 30;
+                else if (tempoFilter === 'antigos') matchesTempo = diffDays > 30;
+                return matchesTab && matchesSearch && matchesTec && matchesTempo;
+            });
+
+            // 2. Ordenação
+            filtered.sort((a, b) => {
+                const dateA = a.dataCriacaoObj;
+                const dateB = b.dataCriacaoObj;
+                if (sortOrder === 'asc') {
+                    return dateA - dateB;
+                } else {
+                    return dateB - dateA;
+                }
+            });
+
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = filtered.length ? '' : '<tr><td colspan="5" class="text-center py-12 text-gray-400 italic">Nenhum chamado encontrado nesta categoria.</td></tr>';
+
+            filtered.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-b dark:border-gray-700 animate-fade-in group";
+                
+                let infoHTML = `<div class="bg-gray-50 dark:bg-gray-900/40 p-3 rounded-lg border border-gray-100 dark:border-gray-800">
+                    <div class="text-orange-500 font-black uppercase text-xs mb-1">${item.empresa}</div>
+                    <div class="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed italic line-clamp-2">${item.historico}</div>
+                </div>`;
+
+                if (item.status === 'tratado') {
+                    infoHTML = `<div class="bg-green-50 dark:bg-green-900/10 p-2 rounded border border-green-100 dark:border-green-900/30 text-xs text-green-600 font-bold mb-2">${item.tratamentoInfo.ocorrencia}</div>` + infoHTML;
+                } else if (item.status === 'agendado') {
+                    const custoFmt = item.custoTotal ? item.custoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00';
+                    infoHTML = `
+                        <div class="bg-blue-50 dark:bg-blue-900/10 p-2 rounded border border-blue-100 dark:border-blue-900/30 mb-2">
+                             <div class="text-xs text-blue-600 font-bold mb-1">📅 ${new Date(item.agendamentoData).toLocaleDateString('pt-BR')}</div>
+                             <div class="flex justify-between items-center">
+                                <span class="text-[10px] text-gray-500 font-bold uppercase">${item.qtdElevadores} Elev.</span>
+                                <span class="text-xs text-emerald-600 font-black bg-emerald-100 dark:bg-emerald-900 px-2 py-0.5 rounded">${custoFmt}</span>
+                             </div>
+                             <div class="text-[10px] text-gray-400 italic mt-1 truncate">${item.tipoServico || 'Serviço Padrão'}</div>
+                        </div>` + infoHTML;
+                } else if (item.status === 'quarentena') {
+                     infoHTML = `<div class="bg-yellow-50 dark:bg-yellow-900/10 p-2 rounded border border-yellow-100 dark:border-yellow-900/30 text-xs text-yellow-600 font-bold mb-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Em Quarentena</div>` + infoHTML;
+                } else if (item.status === 'sem-material') {
+                     infoHTML = `<div class="bg-red-50 dark:bg-red-900/10 p-2 rounded border border-red-100 dark:border-red-900/30 text-xs text-red-600 font-bold mb-2"><i class="fa-solid fa-screwdriver-wrench mr-1"></i> Aguardando Material</div>` + infoHTML;
+                } else if (item.status === 'encerrado') {
+                    infoHTML = `<div class="bg-slate-200 dark:bg-slate-700/50 p-2 rounded border border-slate-300 dark:border-slate-600 text-xs text-slate-600 dark:text-slate-300 font-bold mb-2"><i class="fa-solid fa-check-double mr-1"></i> Chamado Encerrado</div>` + infoHTML;
+                }
+
+                let emailBtn = '';
+                if(currentTab === 'sem-material') {
+                    emailBtn = `<button title="Solicitar Material por E-mail (Gmail Web)" onclick="sendGmailRequest('${item.id}')" class="w-8 h-8 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 transition-colors flex items-center justify-center">
+                                <i class="fa-solid fa-envelope-circle-check text-xs"></i>
+                            </button>`;
+                }
+
+                // Renderiza a Área (badge) apenas se existir valor
+                const areaBadge = item.area ? `<div class="mt-1"><span class="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">${item.area}</span></div>` : '';
+
+                tr.innerHTML = `
+                    <td class="px-6 py-4 align-top">
+                        <div class="font-bold text-lg">#${item.id}</div>
+                        <div class="text-[11px] font-bold text-indigo-500">Cód: ${item.codPonto}</div>
+                    </td>
+                    <td class="px-6 py-4 align-top">
+                        <div class="font-bold text-gray-800 dark:text-gray-200">${item.ponto}</div>
+                        <div class="text-[10px] text-gray-400">Ponto: ${item.codPonto}</div>
+                        <div class="text-[10px] italic text-gray-400">${item.ambiente}</div>
+                        ${areaBadge}
+                    </td>
+                    <td class="px-6 py-4 align-top">
+                        <div class="font-medium text-xs">${item.tecnico}</div>
+                        <div class="text-[10px] text-gray-400">${item.dataCriacaoStr}</div>
+                    </td>
+                    <td class="px-6 py-4 align-top space-y-2">
+                        ${infoHTML}
+                        <div class="flex flex-wrap gap-1">${item.materiais.map(m => {
+                            const unit = m.type.startsWith('CABO') ? 'M' : 'un.';
+                            return `<span class="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 text-[10px] rounded font-bold">${m.qty}${unit} ${m.type}</span>`
+                        }).join('')}</div>
+                    </td>
+                    <td class="px-6 py-4 align-top text-right">
+                        <div class="flex items-center justify-end gap-2">
+                            ${emailBtn} 
+                            
+                            <button title="Encerrar Chamado" onclick="quickUpdateStatus('${item.id}', 'encerrado')" class="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 transition-colors flex items-center justify-center">
+                                <i class="fa-solid fa-check-double text-xs"></i>
+                            </button>
+
+                            <button title="Colocar em Quarentena" onclick="quickUpdateStatus('${item.id}', 'quarentena')" class="w-8 h-8 rounded-full bg-yellow-50 hover:bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20 dark:hover:bg-yellow-900/40 transition-colors flex items-center justify-center">
+                                <i class="fa-solid fa-triangle-exclamation text-xs"></i>
+                            </button>
+                            <button title="Sem Material" onclick="quickUpdateStatus('${item.id}', 'sem-material')" class="w-8 h-8 rounded-full bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-900/20 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center">
+                                <i class="fa-solid fa-screwdriver-wrench text-xs"></i>
+                            </button>
+                            
+                            <div class="relative inline-block dropdown-container">
+                                <button onclick="toggleDropdown('${item.id}')" class="bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-md text-xs font-bold flex items-center">Menu <i class="fa-solid fa-chevron-down ml-1"></i></button>
+                                <div id="dropdown-${item.id}" class="dropdown-content absolute right-0 mt-2 bg-white dark:bg-dark-card rounded-lg shadow-xl border dark:border-gray-700">
+                                    <a href="#" onclick="openMaterial('${item.id}')" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-xs border-b dark:border-gray-700"><i class="fa-solid fa-toolbox mr-2"></i>Materiais</a>
+                                    <a href="#" onclick="openTratar('${item.id}')" class="block px-4 py-2 hover:bg-green-50 dark:hover:bg-green-900/20 text-green-600 text-xs border-b dark:border-gray-700">Tratar</a>
+                                    
+                                    <a href="#" onclick="openAgendar('${item.id}')" class="block px-4 py-2 hover:bg-green-50 dark:hover:bg-green-900/20 text-green-600 text-xs font-bold">
+                                        <i class="fa-solid fa-calendar-check mr-1"></i> Agendar & OS
+                                    </a>
+                                    
+                                    <a href="#" onclick="quickUpdateStatus('${item.id}', 'pendente')" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 text-xs italic">Voltar para Pendente</a>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- RELATÓRIO E AUTOMAÇÕES ---
+        function sendGmailRequest(id) {
+            const ticket = allTickets.find(t => t.id === id);
+            if (!ticket) return;
+
+            const recipients = "feliph.santos@eletromidia.com.br,guilherme.nascimento@eletromidia.com.br,adriano.sousa@eletromidia.com.br";
+            const cc = "dirceu.oliveira@eletromidia.com.br,cristiano.santana@eletromidia.com.br,monitoramento@eletromidia.com.br";
+            const subject = `Solicitação de Material: ${ticket.ponto} - Chamado #${ticket.id}`;
+            const materialList = ticket.materiais.length > 0 
+                ? ticket.materiais.map(m => `- ${m.qty} ${m.type}`).join('\n')
+                : "- Nenhum material listado.";
+            const body = `Boa tarde Srs\n\nEstamos com o chamado abaixo (# ${ticket.id}) pendente de atendimento, devido a falta de alguns materiais. Podem providenciar os materiais abaixo por gentileza.\n\nPonto: ${ticket.ponto}\nCódigo: ${ticket.codPonto}\nAmbiente: ${ticket.ambiente}\nTécnico: ${ticket.tecnico}\n\nMateriais Faltantes:\n${materialList}`;
+            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${recipients}&cc=${cc}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            window.open(gmailUrl, '_blank');
+        }
+
+        function openMissingMaterialsReport() {
+            // Popula o select de técnicos baseado apenas nos chamados sem material
+            const missingTickets = allTickets.filter(t => t.status === 'sem-material');
+            const tecnicos = [...new Set(missingTickets.map(t => t.tecnico))].sort();
+            const filterSelect = document.getElementById('filter-missing-tecnico');
+            const currentSelection = filterSelect.value;
+
+            filterSelect.innerHTML = '<option value="todos">Todos os Técnicos</option>';
+            tecnicos.forEach(tec => {
+                const opt = document.createElement('option');
+                opt.value = tec;
+                opt.innerText = tec;
+                filterSelect.appendChild(opt);
+            });
+
+            // Restaura seleção anterior se possível, senão volta para Todos
+            if (tecnicos.includes(currentSelection)) {
+                filterSelect.value = currentSelection;
+            } else {
+                filterSelect.value = 'todos';
+            }
+
+            updateMissingReportUI();
+            document.getElementById('modal-missing-materials').classList.remove('hidden');
+        }
+
+        function updateMissingReportUI() {
+            const selectedTec = document.getElementById('filter-missing-tecnico').value;
+            let missingTickets = allTickets.filter(t => t.status === 'sem-material');
+
+            // Filtra por técnico se não for "todos"
+            if (selectedTec !== 'todos') {
+                missingTickets = missingTickets.filter(t => t.tecnico === selectedTec);
+            }
+
+            // Recalcula totais baseado na lista filtrada
+            const consolidated = {};
+            missingTickets.forEach(t => {
+                t.materiais.forEach(m => {
+                    consolidated[m.type] = (consolidated[m.type] || 0) + parseFloat(m.qty);
+                });
+            });
+
+            // Renderiza Consolidação
+            const consContainer = document.getElementById('missing-consolidated');
+            consContainer.innerHTML = Object.entries(consolidated).length 
+                ? Object.entries(consolidated).map(([mat, qtd]) => {
+                    const unit = mat.startsWith('CABO') ? 'M' : 'un.';
+                    return `<div class="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                        <span class="text-xs font-bold text-gray-600 dark:text-gray-300 truncate mr-2" title="${mat}">${mat}</span>
+                        <span class="bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 px-2 py-1 rounded text-xs font-black whitespace-nowrap">${qtd} ${unit}</span>
+                    </div>`
+                }).join('')
+                : '<div class="col-span-full text-center text-gray-400 italic">Nenhum material pendente para esta seleção.</div>';
+
+            // Renderiza Cards
+            const listContainer = document.getElementById('missing-list-cards');
+            listContainer.innerHTML = missingTickets.length 
+                ? missingTickets.map(t => {
+                    const matList = t.materiais.map(m => `<li class="text-red-500"><i class="fa-solid fa-caret-right mr-1"></i> ${m.qty} ${m.type}</li>`).join('');
+                    return `<div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:border-indigo-300 transition-colors">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="font-black text-lg text-gray-800 dark:text-white">#${t.id}</span>
+                            <span class="text-xs text-gray-400 font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">${t.codPonto}</span>
+                        </div>
+                        <p class="font-bold text-sm mb-1 truncate">${t.ponto}</p>
+                        <p class="text-xs text-gray-500 mb-3"><i class="fa-solid fa-user-gear mr-1"></i> ${t.tecnico}</p>
+                        <div class="bg-red-50 dark:bg-red-900/10 p-3 rounded-lg border border-red-100 dark:border-red-900/30">
+                            <ul class="text-xs font-bold space-y-1">${matList || '<li class="text-gray-400 italic">Sem itens listados</li>'}</ul>
+                        </div>
+                    </div>`
+                }).join('')
+                : '<div class="col-span-full text-center py-8 text-gray-400 italic">Não há chamados aguardando material para esta seleção.</div>';
+        }
+
+        function quickUpdateStatus(id, newStatus) {
+            const ticket = allTickets.find(t => t.id === id);
+            if (ticket) {
+                ticket.status = newStatus;
+                let msg = "Status atualizado!";
+                if(newStatus === 'quarentena') msg = "Chamado movido para Quarentena";
+                if(newStatus === 'sem-material') msg = "Marcado como Sem Material";
+                if(newStatus === 'encerrado') msg = "Chamado Encerrado!";
+                if(newStatus === 'pendente') msg = "Retornado para Pendente";
+                showToast(msg);
+                updateUI();
+                
+                // Salvar nuvem
+                salvarNaNuvem();
+            }
+        }
+
+        function openReport() {
+            const rep = calculateMetrics();
+            document.getElementById('rep-total').innerText = rep.total;
+            document.getElementById('rep-tratados').innerText = rep.tratados;
+            document.getElementById('rep-agendados').innerText = rep.agendados;
+            document.getElementById('rep-quarentena').innerText = rep.quarentena;
+            document.getElementById('rep-sem-material').innerText = rep.semMaterial;
+            
+            // Valor Monetário
+            document.getElementById('rep-custo-total').innerText = rep.custoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+            const ambDiv = document.getElementById('rep-ambiente-list');
+            ambDiv.innerHTML = Object.entries(rep.porAmbiente).map(([amb, val]) => `
+                <div class="flex justify-between items-center bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl">
+                    <span class="text-sm font-medium">${amb}</span>
+                    <span class="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-xs font-black">${val}</span>
+                </div>
+            `).join('');
+            const matDiv = document.getElementById('rep-materiais-list');
+            matDiv.innerHTML = Object.entries(rep.materiaisConsolidados).length 
+                ? Object.entries(rep.materiaisConsolidados).map(([mat, val]) => {
+                    const unit = mat.startsWith('CABO') ? 'M' : 'un.';
+                    return `<div class="flex justify-between border-b dark:border-gray-700 py-2 text-sm"><span>${mat}</span><span class="font-bold text-indigo-500">${val} ${unit}</span></div>`
+                }).join('')
+                : '<p class="text-gray-400 italic text-sm">Nenhum material alocado.</p>';
+            document.getElementById('modal-relatorio').classList.remove('hidden');
+        }
+
+        function calculateMetrics() {
+            const total = allTickets.length;
+            const tratados = allTickets.filter(t => t.status === 'tratado').length;
+            const agendados = allTickets.filter(t => t.status === 'agendado').length;
+            const quarentena = allTickets.filter(t => t.status === 'quarentena').length;
+            const semMaterial = allTickets.filter(t => t.status === 'sem-material').length;
+            
+            const custoTotal = allTickets
+                .filter(t => t.status === 'agendado')
+                .reduce((acc, t) => acc + (t.custoTotal || 0), 0);
+
+            const porAmbiente = {};
+            allTickets.forEach(t => porAmbiente[t.ambiente] = (porAmbiente[t.ambiente] || 0) + 1);
+            const materiaisConsolidados = {};
+            allTickets.forEach(t => t.materiais.forEach(m => materiaisConsolidados[m.type] = (materiaisConsolidados[m.type] || 0) + parseFloat(m.qty)));
+            
+            return { total, tratados, agendados, quarentena, semMaterial, porAmbiente, materiaisConsolidados, custoTotal };
+        }
+
+        // --- LÓGICA DE MODAIS ---
+        // 2.C ATUALIZAÇÃO CONFIRM TRATAR
+        function confirmTratar() {
+            const oc = document.getElementById('select-ocorrencia').value;
+            const container = document.getElementById('dynamic-questions-container');
+            
+            if(!oc) return alert('Selecione uma ocorrência');
+            
+            // Coletar respostas extras
+            const info = { ocorrencia: oc };
+            
+            // Verifica Radios (Sim/Não)
+            const radioSimNao = container.querySelector('input[type="radio"]:checked');
+            if (radioSimNao) {
+                // Descobre o "name" do radio para usar como chave ou usa label
+                // Simplificação: vamos salvar o valor se houver radio selecionado
+                // Mas precisamos saber a pergunta.
+                // Como o HTML é dinâmico, vamos iterar sobre os inputs
+            }
+
+            // Captura genérica de radios
+            container.querySelectorAll('div').forEach(div => {
+                const label = div.querySelector('p.font-semibold')?.innerText;
+                const checked = div.querySelector('input[type="radio"]:checked');
+                if(label && checked) {
+                    info[label.replace('?', '').trim()] = checked.value;
+                }
+            });
+
+            const ticket = allTickets.find(t => t.id === activeTicketId);
+            if(ticket) { 
+                ticket.status = 'tratado'; 
+                ticket.qtdElevadores = 1; 
+                ticket.tratamentoInfo = info; 
+                closeModals(); 
+                updateUI(); 
+                showToast("Tratado com sucesso!"); 
+                
+                // Salvar nuvem
+                salvarNaNuvem();
+            }
+        }
+
+        // 2. FUNÇÃO RENDERIZAÇÃO DINÂMICA
+        function renderDynamicQuestions() {
+            const val = document.getElementById('select-ocorrencia').value;
+            const container = document.getElementById('dynamic-questions-container');
+            container.innerHTML = '';
+            
+            if (!val) {
+                container.classList.add('hidden');
+                return;
+            }
+
+            let html = '';
+
+            const radioTemplate = (label, name) => `
+                <div>
+                    <p class="text-sm font-semibold mb-2">${label}</p>
+                    <div class="flex gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="${name}" value="Sim" class="text-green-600"> Sim</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="${name}" value="Não" class="text-green-600"> Não</label>
+                    </div>
+                </div>
+            `;
+            
+            const subRadioTemplate = (label, name, opt1, opt2) => `
+                <div class="mt-2 pl-4 border-l-2 border-green-200">
+                    <p class="text-xs font-bold uppercase text-gray-500 mb-2">${label}</p>
+                    <div class="flex flex-col gap-2">
+                        <label class="flex items-center gap-2 cursor-pointer text-sm"><input type="radio" name="${name}" value="${opt1}" class="text-green-600"> ${opt1}</label>
+                        <label class="flex items-center gap-2 cursor-pointer text-sm"><input type="radio" name="${name}" value="${opt2}" class="text-green-600"> ${opt2}</label>
+                    </div>
+                </div>
+            `;
+
+            if (val === 'Elevador em manutenção') {
+                html += radioTemplate('Atendimento foi informado?', 'atendimento_info');
+                html += subRadioTemplate('Tipo de Solicitação', 'tipo_solicitacao', 'Redução de telas', 'Descomercialização');
+            } else if (val === 'Elevador em modernização') {
+                html += subRadioTemplate('Tipo de Solicitação', 'tipo_solicitacao', 'Redução de telas', 'Descomercialização');
+            } else if (val === 'Régua desligada') {
+                html += radioTemplate('Atendimento Ciente?', 'atendimento_ciente');
+            } else if (val === 'Sem energia no Rack') {
+                html += radioTemplate('Atendimento ciente?', 'atendimento_ciente_rack');
+            } else if (val === 'Chamado Instalação') {
+                html += radioTemplate('Passado ao time de instalação?', 'passado_instalacao');
+            }
+
+            if (html) {
+                container.innerHTML = html;
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        document.getElementById('select-ocorrencia').addEventListener('change', renderDynamicQuestions);
+
+        function openTratar(id) { 
+            activeTicketId = id; 
+            document.getElementById('tratar-id').innerText = id; 
+            document.getElementById('select-ocorrencia').value = ""; // Reset
+            renderDynamicQuestions(); // Hide questions
+            document.getElementById('modal-tratar').classList.remove('hidden'); 
+        }
+
+        function openMaterial(id) { activeTicketId = id; document.getElementById('material-id').innerText = id; renderMaterialListInModal(); document.getElementById('modal-material').classList.remove('hidden'); }
+        
+        function addMaterialToTicket() {
+            const customInput = document.getElementById('input-material-custom');
+            const selectElement = document.getElementById('select-material-item');
+            
+            // Prioriza o input customizado, senão pega o do select
+            const type = customInput.value.trim() !== "" ? customInput.value.trim() : selectElement.value;
+            const qty = document.getElementById('input-material-qty').value;
+            
+            const ticket = allTickets.find(t => t.id === activeTicketId);
+            if (ticket && qty > 0) { 
+                ticket.materiais.push({ type, qty }); 
+                renderMaterialListInModal(); 
+                updateUI(); 
+                
+                // Limpa o input customizado após adicionar
+                customInput.value = "";
+                
+                // Salvar nuvem
+                salvarNaNuvem();
+            }
+        }
+
+        function renderMaterialListInModal() {
+            const ticket = allTickets.find(t => t.id === activeTicketId);
+            const container = document.getElementById('modal-material-list');
+            container.innerHTML = ticket?.materiais.length ? '' : '<p class="text-gray-400 text-sm italic">Nenhum item adicionado.</p>';
+            ticket?.materiais.forEach((m, idx) => {
+                const unit = m.type.startsWith('CABO') ? 'M' : 'un.';
+                const div = document.createElement('div');
+                div.className = "flex justify-between items-center bg-gray-100 dark:bg-gray-700/50 p-2 rounded text-sm";
+                div.innerHTML = `<span><b>${m.qty}${unit}</b> ${m.type}</span><button onclick="removeMaterial(${idx})" class="text-red-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>`;
+                container.appendChild(div);
+            });
+        }
+
+        function removeMaterial(idx) { 
+            allTickets.find(t => t.id === activeTicketId).materiais.splice(idx, 1); 
+            renderMaterialListInModal(); 
+            updateUI(); 
+            // Salvar nuvem
+            salvarNaNuvem();
+        }
+
+        function toggleDropdown(id) {
+            const drop = document.getElementById(`dropdown-${id}`);
+            const wasActive = drop.parentElement.classList.contains('dropdown-active');
+            document.querySelectorAll('.dropdown-container').forEach(el => el.classList.remove('dropdown-active'));
+            if(!wasActive) drop.parentElement.classList.add('dropdown-active');
+        }
+
+        function closeModals() { 
+            ['modal-tratar', 'modal-agendamento-financeiro', 'modal-fechamento-financeiro', 'modal-material', 'modal-relatorio', 'modal-missing-materials'].forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.classList.add('hidden');
+            });
+        }
+        
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
+        }
+
+        window.onclick = (e) => { if (!e.target.closest('.dropdown-container')) document.querySelectorAll('.dropdown-container').forEach(el => el.classList.remove('dropdown-active')); }
+        
+
+        // =========================================================================
+        // === FUSÃO CONTABILIDADE / FINANCEIRO ====================================
+        // =========================================================================
+
+        window.mascaraMoeda = function(elemento) {
+            let valor = elemento.value.replace(/\D/g, "");
+            if (valor === "") { elemento.value = ""; return; }
+            valor = (parseFloat(valor) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+            elemento.value = valor;
+        };
+
+        function parseCurrency(valorString) {
+            if(!valorString) return 0;
+            return parseFloat(valorString.replace("R$", "").replace(/\./g, "").replace(",", ".").trim());
+        }
+
+        function formatCurrency(valorFloat) {
+            return valorFloat.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        }
+
+        // LÓGICA DO MODAL DE AGENDAMENTO
+        function openAgendar(id) {
+            activeTicketId = id;
+            const ticket = allTickets.find(t => t.id === id);
+            if(!ticket) return;
+
+            document.getElementById('os-id').value = ticket.id;
+            document.getElementById('os-tecnico').value = ticket.tecnico;
+            document.getElementById('os-predio').value = ticket.ponto;
+            document.getElementById('os-endereco').value = ""; 
+            document.getElementById('os-elevadores').value = "1";
+            document.getElementById('os-valor-unitario').value = "";
+            document.getElementById('os-valor-total').value = "";
+            document.getElementById('os-chamado').value = "";
+            document.getElementById('os-tipo-servico').value = "";
+            document.getElementById('os-agendamento').value = "";
+            
+            // Reset Economia
+            document.getElementById('os-economia').innerText = "Economia Estimada: R$ 0,00";
+            document.getElementById('os-economia').className = "text-sm font-black text-gray-400";
+            tempSavingValue = 0;
+
+            document.getElementById('modal-agendamento-financeiro').classList.remove('hidden');
+        }
+
+        // 3.B LÓGICA DE CÁLCULO E SAVING
+        window.calcularTotalAutomatico = function() {
+            const qtd = parseFloat(document.getElementById('os-elevadores').value) || 0;
+            const valUnitario = parseCurrency(document.getElementById('os-valor-unitario').value);
+            const dataAgendamento = document.getElementById('os-agendamento').value;
+
+            // 1. Total Real
+            const total = qtd * valUnitario;
+            document.getElementById('os-valor-total').value = formatCurrency(total);
+
+            // 2. Cálculo de Economia
+            const ticket = allTickets.find(t => t.id === activeTicketId);
+            if (!ticket || !dataAgendamento) return;
+
+            const empresa = (ticket.empresa || "").toUpperCase();
+            const dateObj = new Date(dataAgendamento);
+            const day = dateObj.getDay(); // 0 Dom, 6 Sab
+            const isWeekend = (day === 0 || day === 6);
+
+            let custoEvitadoUnit = 400.00; // Default OUTRAS
+
+            if (empresa.includes('ATLAS')) {
+                custoEvitadoUnit = isWeekend ? 345.00 : 230.00;
+            } else if (empresa.includes('THYSSEN') || empresa.includes('TKE')) {
+                custoEvitadoUnit = 1301.18;
+            } else if (empresa.includes('OTIS')) {
+                custoEvitadoUnit = 1300.00;
+            }
+
+            const custoEvitadoTotal = custoEvitadoUnit * qtd;
+            const economia = custoEvitadoTotal - total;
+            tempSavingValue = economia; // Guarda para salvar na OS
+
+            const elEconomia = document.getElementById('os-economia');
+            elEconomia.innerText = `Economia Estimada: ${formatCurrency(economia)}`;
+            
+            if (economia >= 0) {
+                elEconomia.className = "text-sm font-black text-green-500 animate-pulse";
+            } else {
+                elEconomia.className = "text-sm font-black text-red-500";
+            }
+        };
+
+        window.salvarEAgendar = function() {
+            const ticket = allTickets.find(t => t.id === activeTicketId);
+            if(!ticket) return;
+
+            const agendamentoRaw = document.getElementById('os-agendamento').value;
+            const endereco = document.getElementById('os-endereco').value;
+            const elevadores = document.getElementById('os-elevadores').value;
+            const valorUnit = document.getElementById('os-valor-unitario').value;
+            const valorTotalStr = document.getElementById('os-valor-total').value;
+            const chamadoDesc = document.getElementById('os-chamado').value;
+            const tipoServico = document.getElementById('os-tipo-servico').value;
+
+            if(!agendamentoRaw || !valorTotalStr || valorTotalStr === 'R$ 0,00' || !tipoServico) {
+                alert("Por favor, preencha: Data, Tipo de Serviço, Elevadores e Valor Unitário.");
+                return;
+            }
+
+            ticket.status = 'agendado';
+            ticket.agendamentoData = agendamentoRaw;
+            ticket.qtdElevadores = elevadores;
+            ticket.custoTotal = parseCurrency(valorTotalStr);
+            ticket.tipoServico = tipoServico;
+            ticket.saving = tempSavingValue; // Salva a economia no objeto
+            
+            const dadosTxt = {
+                id: ticket.id,
+                agendamento: new Date(agendamentoRaw).toLocaleString('pt-BR'),
+                tecnico: ticket.tecnico,
+                predio: ticket.ponto,
+                endereco: endereco || "Endereço não informado",
+                chamado: chamadoDesc || tipoServico,
+                elevadores: elevadores,
+                valor_unitario: valorUnit,
+                valor_total: valorTotalStr,
+                saving: formatCurrency(tempSavingValue) // Passa formatado
+            };
+
+            gerarTxt(dadosTxt);
+            updateUI();
+            closeModals();
+            showToast("Agendado e OS Gerada com Sucesso!");
+            
+            // Salvar nuvem
+            salvarNaNuvem();
+        };
+
+        // 3.D ATUALIZAÇÃO GERAR TXT
+        window.gerarTxt = function(dados) {
+            let conteudo = `
+--- ORDEM DE SERVIÇO (#${dados.id}) ---
+AGENDADO: ${dados.agendamento}
+Técnico: ${dados.tecnico}
+Prédio: ${dados.predio}
+Endereço: ${dados.endereco}
+Chamado/Serviço: ${dados.chamado}
+------------------------
+Quantidade de elevadores: ${dados.elevadores}
+Valor por Elevador: ${dados.valor_unitario}
+------------------------
+Valor Total: ${dados.valor_total}
+Economia Gerada (Saving): ${dados.saving}
+------------------------`.trim();
+
+            let nomeArquivo = `OS_${dados.id}_${dados.predio.replace(/\s+/g, '_')}_${Date.now()}.txt`;
+
+            const element = document.createElement('a');
+            const file = new Blob([conteudo], {type: 'text/plain'});
+            element.href = URL.createObjectURL(file);
+            element.download = nomeArquivo;
+            document.body.appendChild(element);
+            element.click();
+            document.body.removeChild(element);
+        };
+
+        // LÓGICA DO FECHAMENTO FINANCEIRO
+        window.openFechamentoFinanceiro = function() {
+            document.getElementById('total-result-fechamento').innerText = "Total: R$ 0,00";
+            document.getElementById('fileInputFechamento').value = "";
+            document.getElementById('modal-fechamento-financeiro').classList.remove('hidden');
+        };
+
+        window.calcularArquivos = function(files) {
+            let total = 0;
+            let lidos = 0;
+            if(files.length === 0) return;
+            
+            document.getElementById('total-result-fechamento').innerText = "Somando...";
+            
+            Array.from(files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const text = e.target.result;
+                    const linhas = text.split('\n');
+                    linhas.forEach(linha => {
+                        if(linha.includes("Valor Total:")) {
+                            let valorLimpo = linha.split(':')[1].trim()
+                                .replace("R$", "").replace(/\./g, "").replace(",", ".");
+                            let valorNumerico = parseFloat(valorLimpo);
+                            if(!isNaN(valorNumerico)) total += valorNumerico;
+                        }
+                    });
+                    lidos++;
+                    if(lidos === files.length) {
+                        document.getElementById('total-result-fechamento').innerText = 
+                            "Total Mês: " + total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                    }
+                };
+                reader.readAsText(file);
+            });
+        };
+
+        const dropZoneFechamento = document.getElementById('drop-zone-fechamento');
+        if(dropZoneFechamento) {
+            dropZoneFechamento.addEventListener('click', () => document.getElementById('fileInputFechamento').click());
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZoneFechamento.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
+            });
+            dropZoneFechamento.addEventListener('drop', (e) => calcularArquivos(e.dataTransfer.files));
+        }
+
+        // --- FUNÇÕES DE SINCRONIZAÇÃO (IGUAL AO GEOMANAGER) ---
+
+        async function salvarNaNuvem() {
+            console.log("Iniciando salvamento...");
+            try {
+                await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `token ${GITHUB_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        files: {
+                            [GIST_FILENAME]: { content: JSON.stringify(allTickets) }
+                        }
+                    })
+                });
+                console.log("Dados sincronizados com o Gist!");
+            } catch(e) {
+                console.error("Erro ao salvar na nuvem:", e);
+                showToast("Erro de sincronização!");
+            }
+        }
+
+        async function carregarDaNuvem() {
+            try {
+                const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+                    headers: { 'Authorization': `token ${GITHUB_TOKEN}` },
+                    cache: 'no-store'
+                });
+                const data = await res.json();
+                
+                // Verifica se o arquivo existe dentro do gist
+                if (data.files && data.files[GIST_FILENAME]) {
+                    const conteudo = JSON.parse(data.files[GIST_FILENAME].content);
+                    
+                    if (conteudo && Array.isArray(conteudo)) {
+                        // Reverte as strings de data para objetos Date do JS
+                        allTickets = conteudo.map(t => {
+                            if (t.dataCriacaoObj) {
+                                t.dataCriacaoObj = new Date(t.dataCriacaoObj);
+                            }
+                            return t;
+                        });
+                        
+                        // Atualiza filtros e UI
+                        populateTecnicoFilter();
+                        updateUI();
+                        
+                        // Se já existirem dados, pula a tela de upload
+                        if (allTickets.length > 0) {
+                            document.getElementById('upload-section').classList.add('hidden');
+                            document.getElementById('main-interface').classList.remove('hidden');
+                            document.getElementById('btn-report').classList.remove('hidden');
+                            document.getElementById('btn-missing').classList.remove('hidden');
+                        }
+                    }
+                }
+            } catch(e) {
+                console.error("Erro ao carregar dados:", e);
+            }
+        }
+
+        // Iniciar carregamento automático ao abrir a página
+        document.addEventListener('DOMContentLoaded', () => {
+            carregarDaNuvem();
+            
+            // Atualiza sozinho a cada 30 segundos para ver o que outros usuários fizeram
+            setInterval(carregarDaNuvem, 30000); 
+        });
+
+    </script>
+</body>
+</html>
