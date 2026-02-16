@@ -416,9 +416,9 @@
     </div>
 
     <script>
-        // --- CONFIGURAÇÃO ---
-        // --- CONFIGURAÇÃO DA NUVEM (CONEXÃO GIST) ---
-       
+        // --- CONFIGURAÇÃO DA NUVEM (VIA PROXY VERCEL) ---
+        // Substitua pelo seu endereço real da Vercel
+        const PROXY_URL = "https://SUA_URL_DA_VERCEL.vercel.app/api/proxy";
         const GIST_FILENAME = "chamados_db.json";
       
 
@@ -449,9 +449,6 @@
         let currentTab = 'pendente';
         let activeTicketId = null;
         let tempSavingValue = 0; // Armazena economia calculada
-
-
-
 
         // --- INICIALIZAÇÃO ---
         document.getElementById('theme-toggle').addEventListener('click', () => document.documentElement.classList.toggle('dark'));
@@ -487,15 +484,12 @@
                     let dataObj = new Date();
                     
                     if (typeof dataRaw === 'string') {
-                        // Esperado: "10/12/2025 10:05:00" ou similar
                         dataDisplay = dataRaw.split(' ')[0]; // Pega apenas "10/12/2025"
                         const parts = dataDisplay.split('/');
                         if(parts.length === 3) {
-                            // Cria objeto Date (mês em JS é 0-indexado)
                             dataObj = new Date(parts[2], parts[1]-1, parts[0]);
                         }
                     } else if (typeof dataRaw === 'number') {
-                        // Data serial do Excel
                         dataObj = parseExcelDate(dataRaw);
                         dataDisplay = formatExcelDate(dataRaw);
                     }
@@ -529,7 +523,6 @@
                 updateUI();
                 showToast(`Sucesso! ${allTickets.length} chamados importados.`);
                 
-                // Salvar automaticamente na nuvem ao importar novos dados
                 salvarNaNuvem();
             };
             reader.readAsArrayBuffer(file);
@@ -562,7 +555,6 @@
 
             const statuses = ['pendente', 'manutencao', 'modernizacao', 'tratado', 'agendado', 'quarentena', 'sem-material', 'encerrado'];
             
-            // Lógica do Contador de Técnico
             const statsBadge = document.getElementById('tecnico-stats');
             if (tecFilter !== 'todos') {
                 const totalPorTecnico = allTickets.filter(t => t.tecnico === tecFilter).length;
@@ -582,7 +574,6 @@
                 let activeClass = 'font-bold bg-white dark:bg-gray-700 shadow-sm text-gray-800 dark:text-white transform scale-105';
                 let inactiveClass = 'font-medium text-gray-500 hover:text-gray-700';
                 
-                // Cores Personalizadas para Abas Inativas
                 if (t === 'manutencao' && !isActive) inactiveClass = 'font-medium text-orange-600/70 hover:text-orange-700';
                 if (t === 'modernizacao' && !isActive) inactiveClass = 'font-medium text-fuchsia-600/70 hover:text-fuchsia-700';
                 if (t === 'quarentena' && !isActive) inactiveClass = 'font-medium text-yellow-600/70 hover:text-yellow-700';
@@ -592,7 +583,6 @@
                 btn.className = `whitespace-nowrap flex-1 lg:flex-none px-4 py-2.5 rounded-md text-sm transition-all ${isActive ? activeClass : inactiveClass}`;
             });
 
-            // 1. Filtragem
             let filtered = allTickets.filter(t => {
                 const matchesTab = t.status === currentTab;
                 const matchesSearch = t.tecnico.toLowerCase().includes(searchTerm) || t.ponto.toLowerCase().includes(searchTerm) || t.id.includes(searchTerm);
@@ -605,7 +595,6 @@
                 return matchesTab && matchesSearch && matchesTec && matchesTempo;
             });
 
-            // 2. Ordenação
             filtered.sort((a, b) => {
                 const dateA = a.dataCriacaoObj;
                 const dateB = b.dataCriacaoObj;
@@ -660,7 +649,6 @@
                             </button>`;
                 }
 
-                // Renderiza a Área (badge) apenas se existir valor
                 const areaBadge = item.area ? `<div class="mt-1"><span class="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">${item.area}</span></div>` : '';
 
                 tr.innerHTML = `
@@ -730,13 +718,10 @@
             allTickets.forEach(ticket => {
                 if (ticket.status === 'pendente') {
                     const historicoLower = (ticket.historico || '').toLowerCase();
-                    
-                    // Verifica Modernização
                     if (keywordsModernizacao.some(key => historicoLower.includes(key))) {
                         ticket.status = 'modernizacao';
                         countMod++;
                     } 
-                    // Verifica Manutenção (se não for modernização)
                     else if (keywordsManutencao.some(key => historicoLower.includes(key))) {
                         ticket.status = 'manutencao';
                         countMan++;
@@ -788,7 +773,6 @@
         }
 
         function openMissingMaterialsReport() {
-            // Popula o select de técnicos baseado apenas nos chamados sem material
             const missingTickets = allTickets.filter(t => t.status === 'sem-material');
             const tecnicos = [...new Set(missingTickets.map(t => t.tecnico))].sort();
             const filterSelect = document.getElementById('filter-missing-tecnico');
@@ -802,7 +786,6 @@
                 filterSelect.appendChild(opt);
             });
 
-            // Restaura seleção anterior se possível, senão volta para Todos
             if (tecnicos.includes(currentSelection)) {
                 filterSelect.value = currentSelection;
             } else {
@@ -817,12 +800,10 @@
             const selectedTec = document.getElementById('filter-missing-tecnico').value;
             let missingTickets = allTickets.filter(t => t.status === 'sem-material');
 
-            // Filtra por técnico se não for "todos"
             if (selectedTec !== 'todos') {
                 missingTickets = missingTickets.filter(t => t.tecnico === selectedTec);
             }
 
-            // Recalcula totais baseado na lista filtrada
             const consolidated = {};
             missingTickets.forEach(t => {
                 t.materiais.forEach(m => {
@@ -830,7 +811,6 @@
                 });
             });
 
-            // Renderiza Consolidação
             const consContainer = document.getElementById('missing-consolidated');
             consContainer.innerHTML = Object.entries(consolidated).length 
                 ? Object.entries(consolidated).map(([mat, qtd]) => {
@@ -842,7 +822,6 @@
                 }).join('')
                 : '<div class="col-span-full text-center text-gray-400 italic">Nenhum material pendente para esta seleção.</div>';
 
-            // Renderiza Cards
             const listContainer = document.getElementById('missing-list-cards');
             listContainer.innerHTML = missingTickets.length 
                 ? missingTickets.map(t => {
@@ -873,8 +852,6 @@
                 if(newStatus === 'pendente') msg = "Retornado para Pendente";
                 showToast(msg);
                 updateUI();
-                
-                // Salvar nuvem
                 salvarNaNuvem();
             }
         }
@@ -886,8 +863,6 @@
             document.getElementById('rep-agendados').innerText = rep.agendados;
             document.getElementById('rep-quarentena').innerText = rep.quarentena;
             document.getElementById('rep-sem-material').innerText = rep.semMaterial;
-            
-            // Valor Monetário
             document.getElementById('rep-custo-total').innerText = rep.custoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
             const ambDiv = document.getElementById('rep-ambiente-list');
@@ -927,26 +902,12 @@
         }
 
         // --- LÓGICA DE MODAIS ---
-        // 2.C ATUALIZAÇÃO CONFIRM TRATAR
         function confirmTratar() {
             const oc = document.getElementById('select-ocorrencia').value;
             const container = document.getElementById('dynamic-questions-container');
-            
             if(!oc) return alert('Selecione uma ocorrência');
             
-            // Coletar respostas extras
             const info = { ocorrencia: oc };
-            
-            // Verifica Radios (Sim/Não)
-            const radioSimNao = container.querySelector('input[type="radio"]:checked');
-            if (radioSimNao) {
-                // Descobre o "name" do radio para usar como chave ou usa label
-                // Simplificação: vamos salvar o valor se houver radio selecionado
-                // Mas precisamos saber a pergunta.
-                // Como o HTML é dinâmico, vamos iterar sobre os inputs
-            }
-
-            // Captura genérica de radios
             container.querySelectorAll('div').forEach(div => {
                 const label = div.querySelector('p.font-semibold')?.innerText;
                 const checked = div.querySelector('input[type="radio"]:checked');
@@ -963,13 +924,10 @@
                 closeModals(); 
                 updateUI(); 
                 showToast("Tratado com sucesso!"); 
-                
-                // Salvar nuvem
                 salvarNaNuvem();
             }
         }
 
-        // 2. FUNÇÃO RENDERIZAÇÃO DINÂMICA
         function renderDynamicQuestions() {
             const val = document.getElementById('select-ocorrencia').value;
             const container = document.getElementById('dynamic-questions-container');
@@ -981,7 +939,6 @@
             }
 
             let html = '';
-
             const radioTemplate = (label, name) => `
                 <div>
                     <p class="text-sm font-semibold mb-2">${label}</p>
@@ -1028,8 +985,8 @@
         function openTratar(id) { 
             activeTicketId = id; 
             document.getElementById('tratar-id').innerText = id; 
-            document.getElementById('select-ocorrencia').value = ""; // Reset
-            renderDynamicQuestions(); // Hide questions
+            document.getElementById('select-ocorrencia').value = ""; 
+            renderDynamicQuestions(); 
             document.getElementById('modal-tratar').classList.remove('hidden'); 
         }
 
@@ -1038,8 +995,6 @@
         function addMaterialToTicket() {
             const customInput = document.getElementById('input-material-custom');
             const selectElement = document.getElementById('select-material-item');
-            
-            // Prioriza o input customizado, senão pega o do select
             const type = customInput.value.trim() !== "" ? customInput.value.trim() : selectElement.value;
             const qty = document.getElementById('input-material-qty').value;
             
@@ -1048,11 +1003,7 @@
                 ticket.materiais.push({ type, qty }); 
                 renderMaterialListInModal(); 
                 updateUI(); 
-                
-                // Limpa o input customizado após adicionar
                 customInput.value = "";
-                
-                // Salvar nuvem
                 salvarNaNuvem();
             }
         }
@@ -1074,7 +1025,6 @@
             allTickets.find(t => t.id === activeTicketId).materiais.splice(idx, 1); 
             renderMaterialListInModal(); 
             updateUI(); 
-            // Salvar nuvem
             salvarNaNuvem();
         }
 
@@ -1101,11 +1051,7 @@
 
         window.onclick = (e) => { if (!e.target.closest('.dropdown-container')) document.querySelectorAll('.dropdown-container').forEach(el => el.classList.remove('dropdown-active')); }
         
-
-        // =========================================================================
-        // === FUSÃO CONTABILIDADE / FINANCEIRO ====================================
-        // =========================================================================
-
+        // --- FINANCEIRO ---
         window.mascaraMoeda = function(elemento) {
             let valor = elemento.value.replace(/\D/g, "");
             if (valor === "") { elemento.value = ""; return; }
@@ -1122,7 +1068,6 @@
             return valorFloat.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
         }
 
-        // LÓGICA DO MODAL DE AGENDAMENTO
         function openAgendar(id) {
             activeTicketId = id;
             const ticket = allTickets.find(t => t.id === id);
@@ -1138,164 +1083,87 @@
             document.getElementById('os-chamado').value = "";
             document.getElementById('os-tipo-servico').value = "";
             document.getElementById('os-agendamento').value = "";
-            
-            // Reset Economia
             document.getElementById('os-economia').innerText = "Economia Estimada: R$ 0,00";
             document.getElementById('os-economia').className = "text-sm font-black text-gray-400";
             tempSavingValue = 0;
-
             document.getElementById('modal-agendamento-financeiro').classList.remove('hidden');
         }
 
-        // 3.B LÓGICA DE CÁLCULO E SAVING
         window.calcularTotalAutomatico = function() {
             const qtd = parseFloat(document.getElementById('os-elevadores').value) || 0;
             const valUnitario = parseCurrency(document.getElementById('os-valor-unitario').value);
             const dataAgendamento = document.getElementById('os-agendamento').value;
-
-            // 1. Total Real
             const total = qtd * valUnitario;
             document.getElementById('os-valor-total').value = formatCurrency(total);
 
-            // 2. Cálculo de Economia
             const ticket = allTickets.find(t => t.id === activeTicketId);
             if (!ticket || !dataAgendamento) return;
 
             const empresa = (ticket.empresa || "").toUpperCase();
             const dateObj = new Date(dataAgendamento);
-            const day = dateObj.getDay(); // 0 Dom, 6 Sab
-            const isWeekend = (day === 0 || day === 6);
+            const isWeekend = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
+            let custoEvitadoUnit = 400.00;
 
-            let custoEvitadoUnit = 400.00; // Default OUTRAS
+            if (empresa.includes('ATLAS')) custoEvitadoUnit = isWeekend ? 345.00 : 230.00;
+            else if (empresa.includes('THYSSEN') || empresa.includes('TKE')) custoEvitadoUnit = 1301.18;
+            else if (empresa.includes('OTIS')) custoEvitadoUnit = 1300.00;
 
-            if (empresa.includes('ATLAS')) {
-                custoEvitadoUnit = isWeekend ? 345.00 : 230.00;
-            } else if (empresa.includes('THYSSEN') || empresa.includes('TKE')) {
-                custoEvitadoUnit = 1301.18;
-            } else if (empresa.includes('OTIS')) {
-                custoEvitadoUnit = 1300.00;
-            }
-
-            const custoEvitadoTotal = custoEvitadoUnit * qtd;
-            const economia = custoEvitadoTotal - total;
-            tempSavingValue = economia; // Guarda para salvar na OS
-
+            tempSavingValue = (custoEvitadoUnit * qtd) - total;
             const elEconomia = document.getElementById('os-economia');
-            elEconomia.innerText = `Economia Estimada: ${formatCurrency(economia)}`;
-            
-            if (economia >= 0) {
-                elEconomia.className = "text-sm font-black text-green-500 animate-pulse";
-            } else {
-                elEconomia.className = "text-sm font-black text-red-500";
-            }
+            elEconomia.innerText = `Economia Estimada: ${formatCurrency(tempSavingValue)}`;
+            elEconomia.className = tempSavingValue >= 0 ? "text-sm font-black text-green-500 animate-pulse" : "text-sm font-black text-red-500";
         };
 
         window.salvarEAgendar = function() {
             const ticket = allTickets.find(t => t.id === activeTicketId);
-            if(!ticket) return;
-
             const agendamentoRaw = document.getElementById('os-agendamento').value;
-            const endereco = document.getElementById('os-endereco').value;
-            const elevadores = document.getElementById('os-elevadores').value;
-            const valorUnit = document.getElementById('os-valor-unitario').value;
             const valorTotalStr = document.getElementById('os-valor-total').value;
-            const chamadoDesc = document.getElementById('os-chamado').value;
             const tipoServico = document.getElementById('os-tipo-servico').value;
 
             if(!agendamentoRaw || !valorTotalStr || valorTotalStr === 'R$ 0,00' || !tipoServico) {
-                alert("Por favor, preencha: Data, Tipo de Serviço, Elevadores e Valor Unitário.");
-                return;
+                alert("Preencha Data, Serviço e Valores."); return;
             }
 
             ticket.status = 'agendado';
             ticket.agendamentoData = agendamentoRaw;
-            ticket.qtdElevadores = elevadores;
+            ticket.qtdElevadores = document.getElementById('os-elevadores').value;
             ticket.custoTotal = parseCurrency(valorTotalStr);
             ticket.tipoServico = tipoServico;
-            ticket.saving = tempSavingValue; // Salva a economia no objeto
+            ticket.saving = tempSavingValue;
             
-            const dadosTxt = {
-                id: ticket.id,
-                agendamento: new Date(agendamentoRaw).toLocaleString('pt-BR'),
-                tecnico: ticket.tecnico,
-                predio: ticket.ponto,
-                endereco: endereco || "Endereço não informado",
-                chamado: chamadoDesc || tipoServico,
-                elevadores: elevadores,
-                valor_unitario: valorUnit,
-                valor_total: valorTotalStr,
-                saving: formatCurrency(tempSavingValue) // Passa formatado
-            };
-
-            gerarTxt(dadosTxt);
-            updateUI();
-            closeModals();
-            showToast("Agendado e OS Gerada com Sucesso!");
-            
-            // Salvar nuvem
-            salvarNaNuvem();
+            gerarTxt({
+                id: ticket.id, agendamento: new Date(agendamentoRaw).toLocaleString('pt-BR'), tecnico: ticket.tecnico,
+                predio: ticket.ponto, endereco: document.getElementById('os-endereco').value || "N/A",
+                chamado: document.getElementById('os-chamado').value || tipoServico, elevadores: ticket.qtdElevadores,
+                valor_unitario: document.getElementById('os-valor-unitario').value, valor_total: valorTotalStr,
+                saving: formatCurrency(tempSavingValue)
+            });
+            updateUI(); closeModals(); showToast("OS Gerada!"); salvarNaNuvem();
         };
 
-        // 3.D ATUALIZAÇÃO GERAR TXT
-        window.gerarTxt = function(dados) {
-            let conteudo = `
---- ORDEM DE SERVIÇO (#${dados.id}) ---
-AGENDADO: ${dados.agendamento}
-Técnico: ${dados.tecnico}
-Prédio: ${dados.predio}
-Endereço: ${dados.endereco}
-Chamado/Serviço: ${dados.chamado}
-------------------------
-Quantidade de elevadores: ${dados.elevadores}
-Valor por Elevador: ${dados.valor_unitario}
-------------------------
-Valor Total: ${dados.valor_total}
-Economia Gerada (Saving): ${dados.saving}
-------------------------`.trim();
-
-            let nomeArquivo = `OS_${dados.id}_${dados.predio.replace(/\s+/g, '_')}_${Date.now()}.txt`;
-
-            const element = document.createElement('a');
-            const file = new Blob([conteudo], {type: 'text/plain'});
-            element.href = URL.createObjectURL(file);
-            element.download = nomeArquivo;
-            document.body.appendChild(element);
-            element.click();
-            document.body.removeChild(element);
+        window.gerarTxt = function(d) {
+            let c = `--- ORDEM DE SERVIÇO (#${d.id}) ---\nAGENDADO: ${d.agendamento}\nTécnico: ${d.tecnico}\nPrédio: ${d.predio}\nEndereço: ${d.endereco}\nServiço: ${d.chamado}\n------------------------\nElevadores: ${d.elevadores}\nUnitário: ${d.valor_unitario}\nTotal: ${d.valor_total}\nSaving: ${d.saving}\n------------------------`;
+            const el = document.createElement('a');
+            el.href = URL.createObjectURL(new Blob([c], {type: 'text/plain'}));
+            el.download = `OS_${d.id}_${d.predio.replace(/\s+/g, '_')}.txt`;
+            el.click();
         };
 
-        // LÓGICA DO FECHAMENTO FINANCEIRO
         window.openFechamentoFinanceiro = function() {
             document.getElementById('total-result-fechamento').innerText = "Total: R$ 0,00";
-            document.getElementById('fileInputFechamento').value = "";
             document.getElementById('modal-fechamento-financeiro').classList.remove('hidden');
         };
 
         window.calcularArquivos = function(files) {
-            let total = 0;
-            let lidos = 0;
-            if(files.length === 0) return;
-            
-            document.getElementById('total-result-fechamento').innerText = "Somando...";
-            
+            let total = 0, lidos = 0;
+            if(!files.length) return;
             Array.from(files).forEach(file => {
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    const text = e.target.result;
-                    const linhas = text.split('\n');
-                    linhas.forEach(linha => {
-                        if(linha.includes("Valor Total:")) {
-                            let valorLimpo = linha.split(':')[1].trim()
-                                .replace("R$", "").replace(/\./g, "").replace(",", ".");
-                            let valorNumerico = parseFloat(valorLimpo);
-                            if(!isNaN(valorNumerico)) total += valorNumerico;
-                        }
+                    e.target.result.split('\n').forEach(linha => {
+                        if(linha.includes("Valor Total:")) total += parseCurrency(linha.split(':')[1]);
                     });
-                    lidos++;
-                    if(lidos === files.length) {
-                        document.getElementById('total-result-fechamento').innerText = 
-                            "Total Mês: " + total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                    }
+                    if(++lidos === files.length) document.getElementById('total-result-fechamento').innerText = `Total Mês: ${formatCurrency(total)}`;
                 };
                 reader.readAsText(file);
             });
@@ -1304,111 +1172,62 @@ Economia Gerada (Saving): ${dados.saving}
         const dropZoneFechamento = document.getElementById('drop-zone-fechamento');
         if(dropZoneFechamento) {
             dropZoneFechamento.addEventListener('click', () => document.getElementById('fileInputFechamento').click());
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                dropZoneFechamento.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
-            });
-            dropZoneFechamento.addEventListener('drop', (e) => calcularArquivos(e.dataTransfer.files));
+            dropZoneFechamento.addEventListener('dragover', (e) => e.preventDefault());
+            dropZoneFechamento.addEventListener('drop', (e) => { e.preventDefault(); calcularArquivos(e.dataTransfer.files); });
         }
 
-        // --- FUNÇÕES DE SINCRONIZAÇÃO (IGUAL AO GEOMANAGER) ---
-
+        // --- INTEGRAÇÃO PROXY VERCEL ---
         async function salvarNaNuvem() {
-            console.log("Iniciando salvamento...");
+            console.log("Salvando na nuvem via Proxy...");
             try {
-                await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+                await fetch(PROXY_URL, {
                     method: 'PATCH',
-                    headers: {
-                        'Authorization': `token ${GITHUB_TOKEN}`,
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        files: {
-                            [GIST_FILENAME]: { content: JSON.stringify(allTickets) }
-                        }
+                        files: { [GIST_FILENAME]: { content: JSON.stringify(allTickets) } }
                     })
                 });
-                console.log("Dados sincronizados com o Gist!");
+                console.log("Sincronizado!");
             } catch(e) {
-                console.error("Erro ao salvar na nuvem:", e);
+                console.error("Erro sincronização:", e);
                 showToast("Erro de sincronização!");
             }
         }
 
         async function carregarDaNuvem() {
             try {
-                const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-                    headers: { 'Authorization': `token ${GITHUB_TOKEN}` },
-                    cache: 'no-store'
-                });
+                const res = await fetch(PROXY_URL, { cache: 'no-store' });
                 const data = await res.json();
-                
-                // Verifica se o arquivo existe dentro do gist
                 if (data.files && data.files[GIST_FILENAME]) {
                     const conteudo = JSON.parse(data.files[GIST_FILENAME].content);
-                    
-                    if (conteudo && Array.isArray(conteudo)) {
-                        // Reverte as strings de data para objetos Date do JS
+                    if (Array.isArray(conteudo)) {
                         allTickets = conteudo.map(t => {
-                            if (t.dataCriacaoObj) {
-                                t.dataCriacaoObj = new Date(t.dataCriacaoObj);
-                            }
+                            if (t.dataCriacaoObj) t.dataCriacaoObj = new Date(t.dataCriacaoObj);
                             return t;
                         });
-                        
-                        // Atualiza filtros e UI
                         populateTecnicoFilter();
-                        updateUI();
-                        
-                        // Se já existirem dados, pula a tela de upload
                         if (allTickets.length > 0) {
                             document.getElementById('upload-section').classList.add('hidden');
                             document.getElementById('main-interface').classList.remove('hidden');
                             document.getElementById('btn-report').classList.remove('hidden');
                             document.getElementById('btn-missing').classList.remove('hidden');
+                            updateUI();
                         }
                     }
                 }
-            } catch(e) {
-                console.error("Erro ao carregar dados:", e);
-            }
+            } catch(e) { console.error("Erro carga:", e); }
         }
 
-        // --- NOVA FUNÇÃO DE RESET TOTAL ---
         function resetSistema() {
-            if(confirm("ATENÇÃO PERIGO ⚠️\n\nIsso apagará TODOS os dados da nuvem e locais para todos os usuários imediatamente.\n\nDeseja continuar?")) {
-                // 1. Limpa dados locais
-                allTickets = [];
-                
-                // 2. Limpa dados na nuvem
-                salvarNaNuvem();
-                
-                // 3. Reseta Interface
-                document.getElementById('main-interface').classList.add('hidden');
-                document.getElementById('upload-section').classList.remove('hidden');
-                
-                // 4. Esconde botões de ação
-                document.getElementById('btn-report').classList.add('hidden');
-                document.getElementById('btn-missing').classList.add('hidden');
-                
-                // 5. Limpa inputs e filtros
-                document.getElementById('file-input').value = "";
-                const filter = document.getElementById('filter-tecnico');
-                filter.innerHTML = '<option value="todos">Todos os Técnicos</option>';
-                
-                showToast("Sistema resetado com sucesso!");
+            if(confirm("⚠️ Isso apagará TUDO da nuvem. Continuar?")) {
+                allTickets = []; salvarNaNuvem(); location.reload();
             }
         }
 
-        // Iniciar carregamento automático ao abrir a página
         document.addEventListener('DOMContentLoaded', () => {
             carregarDaNuvem();
-            
-            // Atualiza sozinho a cada 30 segundos para ver o que outros usuários fizeram
-            setInterval(carregarDaNuvem, 30000); 
+            setInterval(carregarDaNuvem, 60000); 
         });
-
     </script>
 </body>
 </html>
-
-
